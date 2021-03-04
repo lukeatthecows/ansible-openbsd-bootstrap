@@ -1,0 +1,75 @@
+---
+- hosts: all
+  gather_facts: false
+  vars:
+    ansible_become_method: doas
+    ansible_python_interpreter: /usr/local/bin/python3
+
+  tasks:
+    - name: Install python3
+      raw: test -e /usr/local/bin/python3 || pkg_add python3
+      register: output
+      changed_when: output.stdout != ""
+      become: true
+      vars:
+        ansible_become_method: "{{ raw_method }}"
+
+    - name: Gathering Facts
+      setup:
+
+    - name: Load additional variables from file
+      include_vars:
+        file: ../vars/openbsd_vars.yml
+      when: admin_user is not defined
+
+    - name: Create doas.conf
+      template:
+        src: doas.conf.j2
+        dest: /etc/doas.conf
+        mode: 0600
+        validate: doas -C %s
+      become: true
+      vars:
+        ansible_become_method: "{{ raw_method }}"
+
+    - name: Create admin user
+      user:
+        name: "{{ admin_user }}"
+        groups: "wheel"
+      become: true
+      when: admin_user is defined
+
+    - name: Copy public key to admin user
+      copy:
+        src: "{{ pub_file }}"
+        dest: "~{{ admin_user }}/.ssh/authorized_keys"
+        owner: "{{ admin_user }}"
+        mode: 0600
+        directory_mode: 0700
+      become: true
+      when: admin_user is defined and pub_file is defined
+
+    - name: Change sshd config PasswordAuthentication
+      lineinfile:
+        path: "/etc/ssh/sshd_config"
+        regex: ^(# *)?PasswordAuthentication
+        line: PasswordAuthentication no
+      become: true
+      when: admin_user is defined and pub_file is defined
+      notify: Restart sshd
+
+    - name: Change sshd config PermitRootLogin
+      lineinfile:
+        path: "/etc/ssh/sshd_config"
+        regex: ^(# *)?PermitRootLogin
+        line: PermitRootLogin no
+      become: true
+      when: admin_user is defined and pub_file is defined
+      notify: Restart sshd
+
+  handlers:
+    - name: Restart sshd
+      service:
+        name: sshd
+        state: restarted
+      become: true
