@@ -16,6 +16,9 @@
 
     - name: Gathering Facts
       setup:
+      become: true
+      vars:
+        ansible_become_method: "{{ raw_method }}"
 
     - name: Load additional variables from file
       include_vars:
