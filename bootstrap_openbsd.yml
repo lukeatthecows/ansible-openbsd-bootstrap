@@ -1,5 +1,5 @@
 ---
-- hosts: all
+- hosts: openbsd
   gather_facts: false
   vars:
     ansible_become_method: doas
